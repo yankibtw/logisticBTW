@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#3390ec">
+    <title>LogisticBTW - Склад</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>📦 Склад + 💰 Финансы</h1>
+            <div class="stats-mini">
+                <span id="totalProducts">0</span> товаров
+            </div>
+        </div>
+
+        <!-- Кнопки навигации -->
+        <div class="nav-tabs">
+            <button class="nav-tab active" data-tab="warehouse">📦 Склад</button>
+            <button class="nav-tab" data-tab="sales">💸 Продажи</button>
+            <button class="nav-tab" data-tab="expenses">📉 Расходы</button>
+            <button class="nav-tab" data-tab="reports">📊 Отчёты</button>
+        </div>
+
+        <!-- 🔹 ВКЛАДКА: СКЛАД -->
+        <div id="tab-warehouse" class="tab-content active">
+            <div class="actions">
+                <button class="btn btn-primary" onclick="showAddProduct()">➕ Товар</button>
+                <button class="btn btn-secondary" onclick="refreshData()">🔄 Обновить</button>
+            </div>
+            <div id="productsList" class="products-list"></div>
+        </div>
+
+        <!-- 🔹 ВКЛАДКА: ПРОДАЖИ -->
+        <div id="tab-sales" class="tab-content">
+            <div class="actions">
+                <button class="btn btn-success" onclick="showAddSale()">➕ Продажа</button>
+                <button class="btn btn-secondary" onclick="renderSales()">🔄 Обновить</button>
+            </div>
+            <div id="salesList" class="finance-list"></div>
+        </div>
+
+        <!-- 🔹 ВКЛАДКА: РАСХОДЫ -->
+        <div id="tab-expenses" class="tab-content">
+            <div class="actions">
+                <button class="btn btn-danger" onclick="showAddExpense()">➕ Расход</button>
+                <button class="btn btn-secondary" onclick="renderExpenses()">🔄 Обновить</button>
+            </div>
+            <div id="expensesList" class="finance-list"></div>
+        </div>
+
+        <!-- 🔹 ВКЛАДКА: ОТЧЁТЫ -->
+        <div id="tab-reports" class="tab-content">
+            <div class="report-controls">
+                <select id="reportMonth" onchange="renderFinancialReport()">
+                    <option value="all">📅 Все время</option>
+                    <option value="2026-02">Февраль 2026</option>
+                    <option value="2026-01">Январь 2026</option>
+                </select>
+                <button class="btn btn-secondary" onclick="renderFinancialReport()">🔄 Обновить</button>
+            </div>
+            
+            <div class="report-cards">
+                <div class="report-card income">
+                    <div class="report-label">💸 Доходы</div>
+                    <div class="report-value" id="reportIncome">0 ₽</div>
+                </div>
+                <div class="report-card expense">
+                    <div class="report-label">📉 Расходы</div>
+                    <div class="report-value" id="reportExpenses">0 ₽</div>
+                </div>
+                <div class="report-card profit">
+                    <div class="report-label">📊 Прибыль</div>
+                    <div class="report-value" id="reportProfit">0 ₽</div>
+                </div>
+                <div class="report-card roi">
+                    <div class="report-label">📈 Рентабельность</div>
+                    <div class="report-value" id="reportRoi">0%</div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="financeChart"></canvas>
+            </div>
+
+            <div class="report-summary">
+                <h4>📋 Детализация</h4>
+                <div id="reportDetails"></div>
+            </div>
+        </div>
+
+        <!-- ==================== МОДАЛЬНЫЕ ОКНА ==================== -->
+
+        <!-- Форма товара (без изменений) -->
+        <div id="productForm" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="formTitle">Добавить товар</h2>
+                    <button class="modal-close" onclick="closeForm()">✕</button>
+                </div>
+                <div id="productFormErrors" class="form-errors"></div>
+                <input type="hidden" id="productId">
+                <div class="form-group">
+                    <label>Название товара</label>
+                    <input type="text" id="productName" placeholder="Например: iPhone 15">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>📦 Всего</label>
+                        <input type="number" id="totalQty" value="0" min="0" inputmode="numeric" oninput="clearFieldError('totalQty')">
+                    </div>
+                    <div class="form-group">
+                        <label>🚚 В пути</label>
+                        <input type="number" id="transitQty" value="0" min="0" inputmode="numeric" oninput="clearFieldError('transitQty')">
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-success" onclick="saveProduct()">💾 Сохранить</button>
+                    <button class="btn btn-danger" onclick="closeForm()">❌ Отмена</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Форма бронирования (без изменений) -->
+        <div id="reservationsModal" class="modal">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h2 id="reservationTitle">🔒 Бронирования</h2>
+                    <button class="modal-close" onclick="closeReservationsModal()">✕</button>
+                </div>
+                <input type="hidden" id="reservationProductId">
+                <div class="reservation-info">
+                    <div class="info-row">
+                        <span class="info-label">Товар:</span>
+                        <span class="info-value" id="reservationProductName">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Всего в брони:</span>
+                        <span class="info-value" id="reservationTotalQty">0</span>
+                    </div>
+                </div>
+                <div class="reservations-list" id="reservationsList"></div>
+                <div class="reservation-actions-main">
+                    <button class="btn btn-primary" onclick="showAddReservation()">➕ Добавить бронь</button>
+                    <button class="btn btn-secondary" onclick="closeReservationsModal()">❌ Закрыть</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="reservationForm" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="reservationFormTitle">Добавить бронь</h2>
+                    <button class="modal-close" onclick="closeReservationForm()">✕</button>
+                </div>
+                <div id="reservationFormErrors" class="form-errors"></div>
+                <input type="hidden" id="reservationId">
+                <div class="form-group">
+                    <label>👤 Имя клиента</label>
+                    <input type="text" id="clientName" placeholder="Иван Петров">
+                </div>
+                <div class="form-group">
+                    <label>📦 Количество</label>
+                    <input type="number" id="clientQty" value="1" min="1" inputmode="numeric" oninput="clearFieldError('clientQty')">
+                </div>
+                <div class="form-group">
+                    <label>📅 Дата</label>
+                    <input type="date" id="reservationDate">
+                </div>
+                <div class="form-group">
+                    <label>🔗 Ссылка</label>
+                    <input type="text" id="clientLink" placeholder="@username">
+                </div>
+                <div class="form-group">
+                    <label>💬 Комментарий</label>
+                    <textarea id="clientComment" placeholder="Доп. информация" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-success" onclick="saveReservation()">💾 Сохранить</button>
+                    <button class="btn btn-danger" onclick="closeReservationForm()">❌ Отмена</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 🔥 НОВАЯ: Форма продажи -->
+        <div id="saleForm" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="saleFormTitle">💸 Добавить продажу</h2>
+                    <button class="modal-close" onclick="closeSaleForm()">✕</button>
+                </div>
+                <div id="saleFormErrors" class="form-errors"></div>
+                <input type="hidden" id="saleId">
+                
+                <div class="form-group">
+                    <label>📦 Товар</label>
+                    <select id="saleProduct" onchange="updateSalePriceHint()">
+                        <option value="">Выберите товар...</option>
+                    </select>
+                    <div class="hint" id="saleProductHint"></div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>🔢 Количество</label>
+                        <input type="number" id="saleQty" value="1" min="1" inputmode="numeric" oninput="calculateSaleTotal()">
+                    </div>
+                    <div class="form-group">
+                        <label>💰 Цена за шт. (₽)</label>
+                        <input type="number" id="salePrice" value="0" min="0" inputmode="decimal" oninput="calculateSaleTotal()">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>📅 Дата продажи</label>
+                    <input type="date" id="saleDate">
+                </div>
+
+                <div class="form-group">
+                    <label>👤 Покупатель</label>
+                    <input type="text" id="saleCustomer" placeholder="Имя или @username">
+                </div>
+
+                <div class="form-group">
+                    <label>💬 Комментарий</label>
+                    <textarea id="saleComment" placeholder="Доп. информация" rows="2"></textarea>
+                </div>
+
+                <div class="sale-total">
+                    <span>Итого:</span>
+                    <strong id="saleTotal">0 ₽</strong>
+                </div>
+
+                <div class="form-actions">
+                    <button class="btn btn-success" onclick="saveSale()">💾 Сохранить</button>
+                    <button class="btn btn-danger" onclick="closeSaleForm()">❌ Отмена</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 🔥 НОВАЯ: Форма расхода -->
+        <div id="expenseForm" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="expenseFormTitle">📉 Добавить расход</h2>
+                    <button class="modal-close" onclick="closeExpenseForm()">✕</button>
+                </div>
+                <div id="expenseFormErrors" class="form-errors"></div>
+                <input type="hidden" id="expenseId">
+                
+                <div class="form-group">
+                    <label>📋 Категория</label>
+                    <select id="expenseCategory">
+                        <option value="logistics">🚚 Логистика</option>
+                        <option value="storage">📦 Хранение</option>
+                        <option value="marketing">📢 Реклама</option>
+                        <option value="salary">💼 Зарплаты</option>
+                        <option value="taxes">🏛️ Налоги</option>
+                        <option value="other">📦 Прочее</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>💰 Сумма (₽)</label>
+                    <input type="number" id="expenseAmount" value="0" min="0" inputmode="decimal">
+                </div>
+
+                <div class="form-group">
+                    <label>📅 Дата</label>
+                    <input type="date" id="expenseDate">
+                </div>
+
+                <div class="form-group">
+                    <label>📝 Описание</label>
+                    <textarea id="expenseDescription" placeholder="На что потрачено" rows="3"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>🔗 Привязать к товару (опционально)</label>
+                    <select id="expenseProduct">
+                        <option value="">Не привязывать</option>
+                    </select>
+                </div>
+
+                <div class="form-actions">
+                    <button class="btn btn-success" onclick="saveExpense()">💾 Сохранить</button>
+                    <button class="btn btn-danger" onclick="closeExpenseForm()">❌ Отмена</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
